@@ -1,0 +1,145 @@
+#!/bin/bash
+# Start/stop the clever_logging daemon.
+#
+# chkconfig: 345 85 15
+# description: clever_logging: replicates appending logs from multiple machines to a single destination.
+# processname: clever_logging.pl
+# config: /etc/clever_logging*.conf
+# pidfile: /var/run/clever_logging*.pid
+#
+### BEGIN INIT INFO
+# Provides:          clever_logging
+# Required-Start:    
+# Required-Stop:     
+# Default-Start:     2 3 4 5
+# Default-Stop:      1
+# Short-Description: clever_logging Server.
+# Description:       clever_loging: replicates appending logs from multiple machines to a single destination.
+### END INIT INFO
+
+#
+# If you store clever_logging in a different location,
+# it is recommended not to change CWD, but run:
+#
+# ln -s /path/to/your/clever_logging /opt/clever_logging
+#
+# If you want to change some variables, it is recommended
+# to put these changes to /etc/default/YOUR_INIT_SCRIPT_NAME
+# (typically /etc/default/clever_logging). All variables 
+# defined there will override current script.
+#
+CWD="/opt/clever_logging"
+
+# Same as with additional config: better create symlink in /etc.
+ADDCONFIG="/etc/clever_logging.conf"
+
+# Logging options. By default syslog is used, it allows easy log rotation.
+# You may use $CONF variable to refer to the full config file path.
+LOGTAG='logreplica/`basename $CONF`'
+LOGPRI='local3.info'
+
+# Prefix for PID file.
+PIDPREFIX="/var/run/clever_logging"
+
+# Override settings if needed.
+NAME=`basename $0`
+if [ ${NAME:0:1} = "S" -o ${NAME:0:1} = "K" ]; then
+    NAME=${NAME:3}
+fi
+[ -f /etc/default/${NAME} ] && . /etc/default/${NAME}
+[ -f /etc/sysconfig/${NAME} ] && . /etc/sysconfig/${NAME}
+
+# Script to execute.
+BIN="$CWD/clever_logging.pl"
+
+
+start () {
+	export CONF
+	for CONF in $ADDCONFIG; do
+		PIDFILE=${PIDPREFIX}_`basename $CONF`.pid
+		PID=`cat $PIDFILE 2>/dev/null`
+		if [ "$PID" != "" ] && kill -s 0 $PID 2>/dev/null; then
+			echo "clever_logging for $CONF is already running"
+		else
+			rm -f $PIDFILE 2>/dev/null
+			cd $CWD || exit 1
+			/usr/bin/perl $BIN $CONF -p $PIDFILE --log-priority=`eval "echo $LOGPRI"` --log-tag=`eval "echo $LOGTAG"` --daemonize
+			sleep 1
+			PID=`cat $PIDFILE 2>/dev/null`
+			if [ "$PID" != "" ]; then
+				echo "OK: $CONF"
+			else
+				echo "FAILED: $CONF; see logs"
+			fi
+		fi
+	done
+}
+
+stop () {
+	for CONF in $ADDCONFIG; do
+		PIDFILE=${PIDPREFIX}_`basename $CONF`.pid
+		PID=`cat $PIDFILE 2>/dev/null`
+		if [ "$PID" == "" ]; then
+			echo "clever_logging for $CONF is not running (pid file is empty)"
+		else
+			kill $PID
+			echo "OK: $CONF"
+		fi
+	done
+}
+
+reload () {
+	for CONF in $ADDCONFIG; do
+		PIDFILE=${PIDPREFIX}_`basename $CONF`.pid
+		PID=`cat $PIDFILE 2>/dev/null`
+		if [ "$PID" == "" ]; then
+			echo "clever_logging for $CONF is not running (pid file is empty)"
+			start
+		else
+			# Send SIGHUP to process group.
+			kill -s 1 $PID
+			echo "OK: $CONF"
+		fi
+	done
+}
+
+status() {
+	for CONF in $ADDCONFIG; do
+		PIDFILE=${PIDPREFIX}_`basename $CONF`.pid
+		PID=`cat $PIDFILE 2>/dev/null`
+		if [ "$PID" == "" ]; then
+			echo "clever_logging for $CONF is not running (pid file is empty)"
+			exit 1
+		else
+			# Send SIGHUP to process group.
+			kill -s 0 $PID 2>/dev/null || { echo "clever_logging for $CONF is not running (no process with such pid)"; exit 1; }
+		fi
+	done
+	echo "clever_logging for all configs is running"
+}
+
+
+case $1 in
+	start)
+		start
+	;;
+	stop)
+		stop
+	;;
+	restart)
+		stop
+		sleep 2
+		start
+	;;
+	reload)
+		reload
+	;;
+	status)
+		status
+	;;
+	*)
+		echo "Usage:"
+		echo "  $0 {start|stop|restart|reload}"
+		exit 1
+	;;
+esac
