@@ -59,7 +59,7 @@ so, you are face to face with the following problems:
    configs grow.
 4. Quite oftenly you want to replicate logs filenames by their wildcards
    specified. Syslog cannot do that.
-5. Not all services may send and keep not interesting events in log files 
+5. Not all services may send and keep only interesting events in log files 
 6. Sometime you want to run certain scripts when certain events is happened in log files
 
 clever_logging solves all that problems.
